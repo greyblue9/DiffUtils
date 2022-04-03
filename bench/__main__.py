@@ -68,9 +68,8 @@ def test_data_lines(name, data_dir="data"):
         return cache[name]
     except KeyError:
         result = []
-        with open("{}/{}".format(data_dir, name), "rt") as f:
-            for line in f:
-                result.append(line.rstrip("\r\n"))
+        with open(f"{data_dir}/{name}", "rt") as f:
+            result.extend(line.rstrip("\r\n") for line in f)
         cache[name] = result
         return result
 
@@ -117,16 +116,16 @@ def main():
                 try:
                     result = min(timer.repeat(repeat=repeat, number=iterations))
                 except Exception:
-                    message = "Unable to run {} between {} and {}".format(target, original_name, revised_name)
+                    message = f"Unable to run {target} between {original_name} and {revised_name}"
                     if engine_name:
-                        message += " with {}".format(engine_name)
+                        message += f" with {engine_name}"
                     print(message, file=stderr)
                     timer.print_exc()
                     exit(1)
                 result *= 1000
                 message = "{}  {:.3f} ms -- {} and {}".format(padded_target, result, original_name, revised_name)
                 if engine_name:
-                    message += " with {}".format(engine_name)
+                    message += f" with {engine_name}"
                 print(message)
 
             assert 'engine' not in bench_env, "engine already present: " + repr(bench_env['engine'])

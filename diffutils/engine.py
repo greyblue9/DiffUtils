@@ -45,8 +45,7 @@ class DiffEngine(metaclass=ABCMeta):
         import re
         result = []
         for word in re.split('[-_\s]', self.name):
-            result.append(word[0].upper())
-            result.append(word[1:].lower())
+            result.extend((word[0].upper(), word[1:].lower()))
         return ''.join(result) + "DiffEngine"
 
     INSTANCE = None  # type: DiffEngine
@@ -62,8 +61,13 @@ class DiffEngine(metaclass=ABCMeta):
                 result.append(DiffEngine.create(name='native'))
             except ImportError:
                 pass
-            result.append(DiffEngine.create(name='plain', hash_optimization=True))
-            result.append(DiffEngine.create(name='plain', hash_optimization=False))
+            result.extend(
+                (
+                    DiffEngine.create(name='plain', hash_optimization=True),
+                    DiffEngine.create(name='plain', hash_optimization=False),
+                )
+            )
+
             result = tuple(result)
             setattr(DiffEngine, '_available_engines', result)
             return result
@@ -71,7 +75,7 @@ class DiffEngine(metaclass=ABCMeta):
     @staticmethod
     def create(name=None, hash_optimization=True):
         if name is not None and name not in ('native', 'plain', 'native-myers', 'plain-myers'):
-            raise ValueError("Unknown engine: {}".format(name))
+            raise ValueError(f"Unknown engine: {name}")
         if name is None or name in ('native', 'native-myers'):
             try:
                 from ._native.myers import native_diff
@@ -79,9 +83,7 @@ class DiffEngine(metaclass=ABCMeta):
                     raise ValueError("Hash optimization is always enabled with native_acceleration!")
                 return NativeDiffEngine()
             except ImportError as e:
-                if name is None:
-                    pass
-                else:
+                if name is not None:
                     raise ImportError("Unable to import native implementation!") from e
         assert name is None or name in ('plain-myers', 'plain')
         from ._myers import MyersEngine
