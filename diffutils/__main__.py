@@ -14,20 +14,22 @@ def do_diff(engine: DiffEngine, original: Path, revised: Path, output: Path, con
     original_lines = []
     revised_lines = []
     with open(original, 'rt') as f:
-        for line in f:
-            original_lines.append(line.rstrip("\r\n"))
+        original_lines.extend(line.rstrip("\r\n") for line in f)
     with open(revised, 'rt') as f:
-        for line in f:
-            revised_lines.append(line.rstrip("\r\n"))
+        revised_lines.extend(line.rstrip("\r\n") for line in f)
     result = engine.diff(original_lines, revised_lines)
-    if not original.is_absolute():
-        original_name = str(original)
-    else:
-        original_name = str(original.relative_to(Path.cwd()))
-    if not revised.is_absolute():
-        revised_name = str(revised)
-    else:
-        revised_name = str(revised.relative_to(Path.cwd()))
+    original_name = (
+        str(original.relative_to(Path.cwd()))
+        if original.is_absolute()
+        else str(original)
+    )
+
+    revised_name = (
+        str(revised.relative_to(Path.cwd()))
+        if revised.is_absolute()
+        else str(revised)
+    )
+
     try:
         result_lines = []
         empty = True
@@ -49,20 +51,18 @@ def do_diff(engine: DiffEngine, original: Path, revised: Path, output: Path, con
                 f.write('\n')
         return True
     except FileExistsError:
-        raise CommandError("Output file already exists: {}".format(output))
+        raise CommandError(f"Output file already exists: {output}")
 
 
 def do_patch(patch_file: Path, original: Path, output: Path, context_size=5, force=False):
     original_lines = []
     patch_lines = []
     with open(patch_file, 'rt') as f:
-        for line in f:
-            patch_lines.append(line.rstrip("\r\n"))
+        patch_lines.extend(line.rstrip("\r\n") for line in f)
     patch = parse_unified_diff(patch_lines)
     patch_lines = None  # Free
     with open(original, 'rt') as f:
-        for line in f:
-            original_lines.append(line.rstrip("\r\n"))
+        original_lines.extend(line.rstrip("\r\n") for line in f)
     try:
         result_lines = patch.apply_to(original_lines)
     except PatchFailedException as e:
@@ -73,7 +73,7 @@ def do_patch(patch_file: Path, original: Path, output: Path, context_size=5, for
                 f.write(line)
                 f.write('\n')
     except FileExistsError:
-        raise CommandError("Output file already exists: {}".format(output))
+        raise CommandError(f"Output file already exists: {output}")
 
 
 @arg('original', type=Path, help="The original file/directory")
@@ -87,16 +87,19 @@ def do_patch(patch_file: Path, original: Path, output: Path, context_size=5, for
 def diff(original: Path, revised: Path, output: Path, ignore_missing=False, implementation=None, context=5, unrestricted=False, force=False):
     """Compute the difference between the original and revised text"""
     if not original.exists():
-        raise CommandError("Original file doesn't exist: {}".format(original))
+        raise CommandError(f"Original file doesn't exist: {original}")
     if not revised.exists():
-        raise CommandError("Revised file doesn't exist: {}".format(revised))
+        raise CommandError(f"Revised file doesn't exist: {revised}")
     try:
         engine = DiffEngine.create(name=implementation)
     except ImportError as e:
-        raise CommandError("Unable to import {} implementation!".format(implementation)) from e
+        raise CommandError(f"Unable to import {implementation} implementation!") from e
     if original.is_dir():
         if not revised.is_dir():
-            raise CommandError("Original {} is a directory, but revised {} is a file!".format(original, revised))
+            raise CommandError(
+                f"Original {original} is a directory, but revised {revised} is a file!"
+            )
+
         for revised_root, dirs, files in os.walk(str(revised)):
             for revised_file_name in files:
                 if not unrestricted and revised_file_name.startswith('.'):
@@ -108,19 +111,24 @@ def diff(original: Path, revised: Path, output: Path, ignore_missing=False, impl
                     if ignore_missing:
                         continue
                     else:
-                        raise CommandError("Revised file {} doesn't have matching original {}!".format(revised_file, original_file))
+                        raise CommandError(
+                            f"Revised file {revised_file} doesn't have matching original {original_file}!"
+                        )
+
                 output_file = Path(output, relative_path.parent, relative_path.name + ".patch")
                 output_file.parent.mkdir(parents=True, exist_ok=True)
                 if do_diff(engine, original_file, revised_file, output_file, context_size=context, force=force):
-                    print("Computed diff: {}".format(relative_path))
+                    print(f"Computed diff: {relative_path}")
             if not unrestricted:
                 hidden_dirs = [d for d in dirs if d.startswith('.')]
                 for d in hidden_dirs:
                     dirs.remove(d)
-    else:
-        if not revised.is_file():
-            raise CommandError("Original {} is a file, but revised {} is a directory!".format(original, revised))
+    elif revised.is_file():
         do_diff(engine, original, revised, output, context_size=context, force=force)
+    else:
+        raise CommandError(
+            f"Original {original} is a file, but revised {revised} is a directory!"
+        )
 
 
 @arg('patches', type=Path, help="The patches to apply")
@@ -130,28 +138,36 @@ def diff(original: Path, revised: Path, output: Path, ignore_missing=False, impl
 def patch(patches: Path, original: Path, output: Path, force=False):
     """Applies the specified patches to the original files, producing the revised text"""
     if not patches.exists():
-        raise CommandError("Patch file doesn't exist: {}".format(patches))
+        raise CommandError(f"Patch file doesn't exist: {patches}")
     if not original.exists():
-        raise CommandError("Original file doesn't exist: {}".format(original))
+        raise CommandError(f"Original file doesn't exist: {original}")
     if patches.is_dir():
         if not original.is_dir():
-            raise CommandError("Patches {} is a directory, but original {} is a file!".format(patches, original))
+            raise CommandError(
+                f"Patches {patches} is a directory, but original {original} is a file!"
+            )
+
         for patch_root, dirs, files in os.walk(str(patches)):
             for patch_file_name in files:
                 patch_file = Path(patch_root, patch_file_name)
                 if patch_file.suffix != '.patch':
-                    raise CommandError("Patch file doesn't end with '.patch': {}".format(patch_file_name))
+                    raise CommandError(f"Patch file doesn't end with '.patch': {patch_file_name}")
                 relative_path = Path(patch_file.parent.relative_to(patches), patch_file.stem)
                 original_file = Path(original, relative_path)
                 output_file = Path(output, relative_path)
                 if not original_file.exists():
-                    raise CommandError("Couldn't find  original {} for patch {}!".format(original_file, patch_file))
+                    raise CommandError(
+                        f"Couldn't find  original {original_file} for patch {patch_file}!"
+                    )
+
                 output_file.parent.mkdir(parents=True, exist_ok=True)
                 do_patch(patch_file, original_file, output_file, force=force)
-    else:
-        if not original.is_file():
-            raise CommandError("Patches {} is a file, but original {} is a directory!".format(patches, original))
+    elif original.is_file():
         do_patch(patches, original, output, force=force)
+    else:
+        raise CommandError(
+            f"Patches {patches} is a file, but original {original} is a directory!"
+        )
 
 
 @arg('patch_file', type=Path, help="The patch file to fix")
@@ -162,14 +178,14 @@ def fix_patch(patch_file: Path, original_file: Path, strict=False, context=5):
     """Fixes errors detected in the patch, by leniently parsing it and then re-emitting it"""
     if not patch_file.is_file():
         if patch_file.exists():
-            raise CommandError("Patch file is a directory: {}".format(patch_file))
+            raise CommandError(f"Patch file is a directory: {patch_file}")
         else:
-            raise CommandError("Patch file doesn't exist: {}".format(patch_file))
+            raise CommandError(f"Patch file doesn't exist: {patch_file}")
     if not original_file.is_file():
         if original_file.exists():
-            raise CommandError("Original file is a directory: {}".format(original_file))
+            raise CommandError(f"Original file is a directory: {original_file}")
         else:
-            raise CommandError("Original file doesn't exist: {}".format(original_file))
+            raise CommandError(f"Original file doesn't exist: {original_file}")
     patch_lines = []
     # TODO: Make a public API for parsing original_name and revised_name
     original_name, revised_name = None, None
@@ -182,12 +198,11 @@ def fix_patch(patch_file: Path, original_file: Path, strict=False, context=5):
             patch_lines.append(line.rstrip("\r\n"))
     original_lines = []
     with open(original_file, 'rt') as f:
-        for line in f:
-            original_lines.append(line.rstrip("\r\n"))
+        original_lines.extend(line.rstrip("\r\n") for line in f)
     if original_name is None:
-        raise CommandError("Unable to detect original file name in {}".format(patch_file))
+        raise CommandError(f"Unable to detect original file name in {patch_file}")
     elif revised_name is None:
-        raise CommandError("Unable to detect revised file name in {}".format(patch_file))
+        raise CommandError(f"Unable to detect revised file name in {patch_file}")
     patch = parse_unified_diff(patch_lines, lenient=not strict)
     with open(patch_file, 'wt') as f:
         for line in generate_unified_diff(

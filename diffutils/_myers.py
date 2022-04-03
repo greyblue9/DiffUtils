@@ -221,10 +221,7 @@ def create_diff_node(i, j, prev):
     node = DiffNode(i, j)
     prev = prev.lastSnake
     node.prev = prev
-    if i < 0 or j < 0:
-        node.lastSnake = None
-    else:
-        node.lastSnake = prev.lastSnake
+    node.lastSnake = None if i < 0 or j < 0 else prev.lastSnake
     return node
 
 

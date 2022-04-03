@@ -78,8 +78,8 @@ class Delta(metaclass=ABCMeta):
         original, revised = self.original, self.revised
         self.verify(target)
         position = original.position
-        size = len(original)
         if original:
+            size = len(original)
             # NOTE: This was a call to remove in a loop, which was O(n^2)
             # In my deffense I didn't understand slicing, so I didn't know how to do it fast
             del target[position:position + size]
@@ -114,10 +114,7 @@ class Delta(metaclass=ABCMeta):
         """Create a delta of the apropriate type, based on the original and revised chunks"""
         assert type(original) is Chunk and type(revised) is Chunk
         if original:
-            if revised:
-                delta_type = ChangeDelta
-            else:
-                delta_type = DeleteDelta
+            delta_type = ChangeDelta if revised else DeleteDelta
         elif revised:
             delta_type = InsertDelta
         else:
@@ -179,9 +176,7 @@ class Chunk:
             actual = target[index]
             if actual != expected:
                 raise PatchFailedException(
-                    "Incorrect Chunk: the chunk content {} doesn't match the target {} at {}".format(
-                        repr(expected), repr(actual), index
-                    )
+                    f"Incorrect Chunk: the chunk content {repr(expected)} doesn't match the target {repr(actual)} at {index}"
                 )
 
     def __len__(self):
@@ -205,9 +200,11 @@ class Chunk:
         return hash((self.lines, self.position))
 
     def __eq__(self, other):
-        if not isinstance(other, Chunk):
-            return False
-        return self.lines == other.lines and self.position == other.position
+        return (
+            self.lines == other.lines and self.position == other.position
+            if isinstance(other, Chunk)
+            else False
+        )
 
 
 class Patch:
@@ -215,7 +212,7 @@ class Patch:
     __slots__ = "_deltas"
 
     def __init__(self):
-        self._deltas = list()
+        self._deltas = []
 
     def apply_to(self, target):
         """
@@ -271,9 +268,7 @@ class Patch:
         return deltas  # type: ignore
 
     def __eq__(self, other):
-        if not isinstance(other, Patch):
-            return False
-        return other._deltas == self._deltas
+        return other._deltas == self._deltas if isinstance(other, Patch) else False
 
 
 class PatchFailedException(Exception):

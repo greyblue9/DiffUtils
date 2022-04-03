@@ -17,7 +17,7 @@ from typing import Iterator, List
 
 class UnifiedDiffOutput:
     def __init__(self):
-        self.buffer = list()
+        self.buffer = []
 
     def add_context_line(self, line):
         self._write(' ', line)
@@ -55,8 +55,8 @@ def generate_unified_diff(original_file, revised_file, original_lines, patch, co
     deltas = patch.deltas
     if not deltas:
         return  # There is nothing in the patch to output
-    yield "--- " + original_file
-    yield "+++ " + revised_file
+    yield f"--- {original_file}"
+    yield f"+++ {revised_file}"
 
     delta = deltas[0]
     delta_batch = [delta]  # Deltas are batched together and are output together, to get rid of redundant context
@@ -65,12 +65,13 @@ def generate_unified_diff(original_file, revised_file, original_lines, patch, co
         for next_delta in deltas[1:]:
             position = delta.original.position
 
-            if position + len(delta.original.lines) + context_size >= next_delta.original.position - context_size:
-                delta_batch.append(next_delta)
-            else:
+            if (
+                position + len(delta.original.lines) + context_size
+                < next_delta.original.position - context_size
+            ):
                 yield from process_deltas(original_lines, delta_batch, context_size)
                 delta_batch.clear()
-                delta_batch.append(next_delta)
+            delta_batch.append(next_delta)
             delta = next_delta
     # Process the last batch of deltas
     yield from process_deltas(original_lines, delta_batch, context_size)
